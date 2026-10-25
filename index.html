@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#B8391F">
+<meta name="description" content="原稿に指摘を付けて、Claudeへの修正指示文にまとめるツール">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="原稿コメント">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>原稿コメント</title>
+<style>
+  :root {
+    --paper: #F5F0E4;
+    --card: #FBF8F1;
+    --ink: #2A241D;
+    --faded: #8A8072;
+    --border: #DFD3B8;
+    --shu: #B8391F;
+    --shu-dark: #8F2C17;
+    --shu-light: #F1D9CC;
+    --shu-mid: #E4B9A6;
+    --sel: #F5E1A0;
+    --on-shu: #FFFFFF;
+    --shadow: 0 -8px 28px rgba(42, 36, 29, .16);
+    --mincho: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP', 'Noto Serif CJK JP', serif;
+    --gothic: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'YuGothic', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1D1915;
+      --card: #27221C;
+      --ink: #ECE4D6;
+      --faded: #A59A89;
+      --border: #463D31;
+      --shu: #D9603F;
+      --shu-dark: #F08A6E;
+      --shu-light: #4B2A1F;
+      --shu-mid: #6E3726;
+      --sel: #5A4919;
+      --shadow: 0 -8px 28px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--gothic);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+
+  /* ── ヘッダー ── */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 8px;
+    padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; margin-right: auto; min-width: 0; }
+  .seal {
+    flex: none; width: 28px; height: 28px; border-radius: 6px;
+    background: var(--shu); color: var(--on-shu);
+    font-family: var(--mincho); font-weight: 700; font-size: 17px;
+    display: grid; place-items: center;
+  }
+  .brand h1 { font-family: var(--mincho); font-size: 17px; margin: 0; letter-spacing: .06em; white-space: nowrap; }
+  .hbtn {
+    flex: none; border: 1px solid var(--border); background: var(--card);
+    border-radius: 999px; padding: 6px 12px; font-size: 13px; white-space: nowrap;
+  }
+  .hbtn.accent { background: var(--shu); color: var(--on-shu); border-color: var(--shu); }
+
+  /* ── 開始画面 ── */
+  #startView { padding: 20px 16px 40px; max-width: 640px; margin: 0 auto; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-family: var(--mincho); font-size: 18px; margin: 0 0 8px; letter-spacing: .04em; }
+  .card p { margin: 0 0 12px; color: var(--faded); font-size: 14px; }
+  .bigbtn {
+    display: block; width: 100%; text-align: center;
+    border: none; border-radius: 12px; padding: 14px;
+    background: var(--shu); color: var(--on-shu); font-weight: 700; font-size: 16px;
+  }
+  .bigbtn.ghost { background: transparent; color: var(--shu); border: 1.5px solid var(--shu); }
+  .or { text-align: center; color: var(--faded); font-size: 13px; margin: 14px 0; }
+  #pasteArea {
+    width: 100%; min-height: 160px; resize: vertical;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--paper);
+    padding: 12px; font-family: var(--mincho); font-size: 15px; line-height: 1.8;
+    margin-bottom: 10px;
+  }
+  details.howto summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+  details.howto ol { margin: 10px 0 0; padding-left: 1.4em; font-size: 14px; }
+  details.howto li { margin-bottom: 6px; }
+
+  /* ── 作業画面 ── */
+  #workView { padding-bottom: calc(env(safe-area-inset-bottom) + 96px); }
+  .fileline {
+    max-width: 40em; margin: 0 auto; padding: 12px 18px 0;
+    color: var(--faded); font-size: 12.5px; display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .fileline b { color: var(--ink); font-weight: 700; }
+  #ms {
+    max-width: 40em; margin: 0 auto; padding: 14px 18px 40px;
+    font-family: var(--mincho); font-size: 17px; line-height: 2;
+    letter-spacing: .02em; white-space: pre-wrap; word-break: break-word;
+    cursor: text;
+  }
+  #ms .hl { background: var(--shu-light); border-bottom: 2px solid var(--shu); }
+  #ms .hl2 { background: var(--shu-mid); border-bottom: 2px solid var(--shu-dark); }
+  #ms .sel { background: var(--sel); box-shadow: 0 0 0 2px var(--sel); border-radius: 2px; }
+  #ms .mk {
+    font-family: var(--gothic); font-size: 10.5px; font-weight: 700; line-height: 1;
+    color: var(--on-shu); background: var(--shu);
+    border-radius: 9px; padding: 2px 5px; margin: 0 2px;
+    vertical-align: super; cursor: pointer;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ── 下部バー ── */
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+    display: flex; gap: 10px; padding: 10px 14px calc(env(safe-area-inset-bottom) + 10px);
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border);
+  }
+  .bar button { flex: 1; border-radius: 12px; padding: 13px 8px; font-weight: 700; font-size: 15px; }
+  #listBtn { background: var(--card); border: 1px solid var(--border); }
+  #genBtn { background: var(--shu); color: var(--on-shu); border: none; }
+  #genBtn:disabled { opacity: .45; }
+  .count {
+    display: inline-block; min-width: 1.6em; padding: 0 .4em; margin-left: 4px;
+    border-radius: 999px; background: var(--shu); color: var(--on-shu); font-size: 12px; line-height: 1.6;
+  }
+
+  #selFloat {
+    position: fixed; left: 50%; transform: translateX(-50%); z-index: 16;
+    bottom: calc(env(safe-area-inset-bottom) + 84px);
+    border: none; border-radius: 999px; padding: 11px 18px;
+    background: var(--ink); color: var(--paper); font-weight: 700; font-size: 14px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25); white-space: nowrap;
+  }
+
+  /* ── シート ── */
+  #backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(20, 16, 12, .35); }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 31;
+    max-width: 680px; margin: 0 auto;
+    max-height: 78vh; display: flex; flex-direction: column;
+    background: var(--card); border-radius: 18px 18px 0 0; box-shadow: var(--shadow);
+    padding: 8px 16px calc(env(safe-area-inset-bottom) + 14px);
+  }
+  .grip { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 2px auto 10px; flex: none; }
+  .sheet h3 { margin: 0 0 8px; font-size: 15px; display: flex; align-items: center; gap: 8px; flex: none; }
+  .sheet h3 .sub { font-weight: 400; color: var(--faded); font-size: 12.5px; }
+  .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1 1 auto; min-height: 0; }
+  .quote {
+    font-family: var(--mincho); font-size: 14.5px; line-height: 1.8;
+    border-left: 3px solid var(--shu); background: var(--paper);
+    padding: 8px 10px; border-radius: 0 8px 8px 0; margin-bottom: 8px;
+    max-height: 7.5em; overflow-y: auto; white-space: pre-wrap;
+  }
+  .extend { display: flex; gap: 8px; margin-bottom: 10px; }
+  .chip {
+    border: 1px solid var(--border); background: var(--paper); border-radius: 999px;
+    padding: 5px 12px; font-size: 13px;
+  }
+  #commentBox {
+    width: 100%; min-height: 120px; resize: vertical;
+    border: 1.5px solid var(--border); border-radius: 10px; background: var(--paper);
+    padding: 10px 12px; font-family: var(--mincho); font-size: 15.5px; line-height: 1.8;
+  }
+  #commentBox:focus { outline: none; border-color: var(--shu); }
+  .guide { font-size: 12.5px; color: var(--faded); margin: 6px 0 12px; }
+  .row { display: flex; gap: 8px; flex: none; }
+  .row button { flex: 1; border-radius: 10px; padding: 12px 6px; font-size: 14.5px; font-weight: 700; }
+  .btn-sub { background: var(--paper); border: 1px solid var(--border); }
+  .btn-main { background: var(--shu); color: var(--on-shu); border: none; }
+  .btn-danger { background: transparent; border: 1px solid var(--shu); color: var(--shu); }
+
+  .item {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 12px 2px; border-bottom: 1px solid var(--border);
+  }
+  .item .num {
+    flex: none; min-width: 26px; height: 26px; border-radius: 13px; padding: 0 6px;
+    background: var(--shu); color: var(--on-shu); font-weight: 700; font-size: 13px;
+    display: grid; place-items: center; margin-top: 2px;
+  }
+  .item .body { flex: 1; min-width: 0; cursor: pointer; }
+  .item .q { font-family: var(--mincho); font-size: 14px; color: var(--faded);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .c { font-size: 14px; margin-top: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .warn { font-size: 11.5px; color: var(--shu); font-weight: 700; }
+  .item .del { flex: none; border: none; background: none; color: var(--faded); font-size: 13px; padding: 4px 6px; }
+  .empty { color: var(--faded); text-align: center; padding: 28px 0; font-size: 14px; }
+
+  #outBox {
+    width: 100%; min-height: 240px; height: 42vh; resize: vertical;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--paper);
+    padding: 10px 12px; font-family: var(--gothic); font-size: 13.5px; line-height: 1.7;
+  }
+  .note { font-size: 12.5px; color: var(--shu); margin: 0 0 8px; font-weight: 700; }
+
+  #toast {
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 64px); transform: translateX(-50%);
+    z-index: 50; background: var(--ink); color: var(--paper);
+    padding: 9px 16px; border-radius: 999px; font-size: 13.5px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap;
+  }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><div class="seal">朱</div><h1>原稿コメント</h1></div>
+  <button class="hbtn accent" id="installBtn" hidden>インストール</button>
+  <button class="hbtn" id="loadBtn">読み込む</button>
+  <button class="hbtn" id="newBtn" hidden>別の原稿</button>
+  <input type="file" id="fileInput" hidden>
+</header>
+
+<!-- 開始画面 -->
+<main id="startView">
+  <section class="card">
+    <h2>原稿を開く</h2>
+    <p>テキスト（.txt）かMarkdown（.md）を読み込むか、本文を貼り付けてください。原稿はこの端末の中だけに保存され、どこにも送信されません。</p>
+    <button class="bigbtn" id="startLoadBtn">ファイルを読み込む</button>
+    <div class="or">または</div>
+    <textarea id="pasteArea" placeholder="ここに本文を貼り付け"></textarea>
+    <button class="bigbtn ghost" id="pasteStartBtn">この文章で始める</button>
+  </section>
+
+  <section class="card">
+    <details class="howto">
+      <summary>使い方</summary>
+      <ol>
+        <li>本文の文をタップすると、その一文が選ばれます。「」や（）の中をタップすると括弧の中身だけが選ばれます。</li>
+        <li>長押しで好きな範囲を選び、「選択範囲に指摘を付ける」を押すこともできます。</li>
+        <li>コメント欄には選んだ文が入っているので、直したい形や指示に書き換えて「追加」します。</li>
+        <li>「指示文を作る」で、Claudeに貼り付ける修正指示がまとまります。</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="card" id="installCard">
+    <details class="howto">
+      <summary>ホーム画面に追加するには</summary>
+      <ol>
+        <li><b>Android（Chrome）</b>：右上の「⋮」→「ホーム画面に追加」または「アプリをインストール」。</li>
+        <li><b>iPhone（Safari）</b>：下の共有ボタン →「ホーム画面に追加」。</li>
+        <li>一度追加すれば、電波がなくても起動できます。</li>
+      </ol>
+    </details>
+  </section>
+</main>
+
+<!-- 作業画面 -->
+<main id="workView" hidden>
+  <div class="fileline"><span id="fileName"></span><span id="charCount"></span></div>
+  <div id="ms"></div>
+</main>
+
+<button id="selFloat" hidden>選択範囲に指摘を付ける</button>
+
+<nav class="bar" id="bar" hidden>
+  <button id="listBtn">指摘一覧<span class="count" id="countBadge">0</span></button>
+  <button id="genBtn">指示文を作る</button>
+</nav>
+
+<div id="backdrop" hidden></div>
+
+<!-- コメント入力シート -->
+<section class="sheet" id="commentSheet" hidden>
+  <div class="grip"></div>
+  <h3 id="commentTitle">指摘を追加</h3>
+  <div class="scroll">
+    <div class="quote" id="quote"></div>
+    <div class="extend">
+      <button class="chip" id="extPrev">＋前の文</button>
+      <button class="chip" id="extNext">＋次の文</button>
+    </div>
+    <textarea id="commentBox"></textarea>
+    <div class="guide">↑ 選んだ文が入っています。直したい形や、Claudeへの指示に書き換えてください。</div>
+  </div>
+  <div class="row">
+    <button class="btn-sub" id="resetComment">選択文に戻す</button>
+    <button class="btn-danger" id="deleteNote" hidden>削除</button>
+    <button class="btn-sub" id="cancelComment">やめる</button>
+    <button class="btn-main" id="saveComment">追加</button>
+  </div>
+</section>
+
+<!-- 一覧シート -->
+<section class="sheet" id="listSheet" hidden>
+  <div class="grip"></div>
+  <h3>指摘一覧 <span class="sub" id="listSub"></span></h3>
+  <div class="scroll" id="listBody"></div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn-danger" id="clearAll">すべて消去</button>
+    <button class="btn-sub" id="closeList">閉じる</button>
+  </div>
+</section>
+
+<!-- 出力シート -->
+<section class="sheet" id="outSheet" hidden>
+  <div class="grip"></div>
+  <h3>Claudeへの指示文 <span class="sub">コピーして貼り付けてください</span></h3>
+  <p class="note" id="outWarn" hidden></p>
+  <div class="scroll"><textarea id="outBox" readonly></textarea></div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn-sub" id="doneClear">送信済み・指摘を消去</button>
+    <button class="btn-main" id="copyOut">コピー</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button class="btn-sub" id="closeOut">閉じる</button>
+  </div>
+</section>
+
+<div id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ───────── 状態と保存 ─────────
+  const KEY = 'genko-comment-v1';
+  let state = { fileName: '', text: '', notes: [], nextId: 1 };
+  let pending = null;          // { start, end, id|null, base }
+  let deferredInstall = null;
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && typeof s.text === 'string') state = Object.assign(state, s);
+      }
+    } catch (e) { /* 保存領域が使えない環境では何もしない */ }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { toast('保存できませんでした（容量不足の可能性）'); }
+  }
+
+  // ───────── 要素 ─────────
+  const $ = (id) => document.getElementById(id);
+  const ms = $('ms');
+
+  // ───────── 文の切り出し ─────────
+  const OPEN = '「『（(【〔“';
+  const CLOSE = '」』）)】〕”';
+  const END = '。！？!?';
+  const SPACE = /[\s　]/;
+
+  // タップした文字を含む、最も内側の括弧の中身（同じ行の中だけ）
+  function bracketAt(t, ci) {
+    let o = -1;
+    if (OPEN.includes(t[ci])) {
+      o = ci;
+    } else {
+      let depth = 0;
+      for (let i = ci - 1; i >= 0; i--) {
+        const ch = t[i];
+        if (ch === '\n') break;
+        if (CLOSE.includes(ch)) depth++;
+        else if (OPEN.includes(ch)) {
+          if (depth > 0) depth--;
+          else { o = i; break; }
+        }
+      }
+    }
+    if (o < 0) return null;
+    let depth = 0, c = -1;
+    for (let j = o + 1; j < t.length; j++) {
+      const ch = t[j];
+      if (ch === '\n') break;
+      if (OPEN.includes(ch)) depth++;
+      else if (CLOSE.includes(ch)) {
+        if (depth > 0) depth--;
+        else { c = j; break; }
+      }
+    }
+    if (c < 0 || c < ci || c - o <= 1) return null;
+    return trimRange(t, o + 1, c);
+  }
+
+  // 「。！？改行」で区切った一文（括弧の中の句点では切らない）
+  function sentenceAt(t, ci) {
+    let s = 0, depth = 0;
+    for (let i = ci - 1; i >= 0; i--) {
+      const ch = t[i];
+      if (ch === '\n') { s = i + 1; break; }
+      if (CLOSE.includes(ch)) depth++;
+      else if (OPEN.includes(ch)) { if (depth > 0) depth--; }
+      else if (depth === 0 && END.includes(ch)) { s = i + 1; break; }
+    }
+    let e = t.length; depth = 0;
+    for (let i = ci; i < t.length; i++) {
+      const ch = t[i];
+      if (ch === '\n') { e = i; break; }
+      if (OPEN.includes(ch)) depth++;
+      else if (CLOSE.includes(ch)) { if (depth > 0) depth--; }
+      else if (depth === 0 && END.includes(ch)) {
+        let j = i + 1;
+        while (j < t.length && END.includes(t[j])) j++;
+        e = j; break;
+      }
+    }
+    return trimRange(t, s, e);
+  }
+
+  function trimRange(t, s, e) {
+    while (s < e && SPACE.test(t[s])) s++;
+    while (e > s && SPACE.test(t[e - 1])) e--;
+    return s < e ? { start: s, end: e } : null;
+  }
+
+  function unitRangeAt(t, ci) {
+    if (ci < 0 || ci >= t.length || t[ci] === '\n') return null;
+    return bracketAt(t, ci) || sentenceAt(t, ci);
+  }
+
+  // ───────── 描画 ─────────
+  function esc(s) {
+    return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  function sortedNotes() {
+    return [...state.notes].sort((a, b) => a.start - b.start || a.end - b.end || a.id - b.id);
+  }
+
+  function render() {
+    const t = state.text;
+    const notes = sortedNotes();
+    const numOf = new Map(notes.map((n, i) => [n.id, i + 1]));
+    const pts = new Set([0, t.length]);
+    notes.forEach((n) => { pts.add(n.start); pts.add(n.end); });
+    if (pending) { pts.add(pending.start); pts.add(pending.end); }
+    const bounds = [...pts].sort((a, b) => a - b);
+
+    let html = '';
+    for (let k = 0; k < bounds.length - 1; k++) {
+      const a = bounds[k], b = bounds[k + 1];
+      if (a === b) continue;
+      let cover = 0;
+      for (const n of notes) if (n.start <= a && n.end >= b) cover++;
+      const isSel = pending && pending.start <= a && pending.end >= b;
+      const cls = isSel ? 'sel' : cover >= 2 ? 'hl2' : cover === 1 ? 'hl' : '';
+      html += `<span data-s="${a}"${cls ? ` class="${cls}"` : ''}>${esc(t.slice(a, b))}</span>`;
+      for (const n of notes) {
+        if (n.end === b) html += `<sup class="mk" data-id="${n.id}">${numOf.get(n.id)}</sup>`;
+      }
+    }
+    ms.innerHTML = html;
+
+    $('countBadge').textContent = notes.length;
+    $('genBtn').disabled = notes.length === 0;
+    $('fileName').innerHTML = `<b>${esc(state.fileName || '貼り付けた文章')}</b>`;
+    $('charCount').textContent = `${t.length.toLocaleString()}字`;
+  }
+
+  function showView() {
+    const has = state.text.length > 0;
+    $('startView').hidden = has;
+    $('workView').hidden = !has;
+    $('bar').hidden = !has;
+    $('newBtn').hidden = !has;
+    if (has) render();
+  }
+
+  // ───────── 座標 → 文字位置 ─────────
+  function caretAt(x, y) {
+    if (document.caretPositionFromPoint) {
+      const p = document.caretPositionFromPoint(x, y);
+      if (p) return { node: p.offsetNode, offset: p.offset };
+    }
+    if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(x, y);
+      if (r) return { node: r.startContainer, offset: r.startOffset };
+    }
+    return null;
+  }
+
+  function globalPos(node, offset) {
+    if (!node || !ms.contains(node)) return null;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const span = node.parentElement && node.parentElement.closest('[data-s]');
+      if (!span || !ms.contains(span)) return null;
+      return +span.dataset.s + offset;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.dataset && node.dataset.s != null) {
+        return offset === 0 ? +node.dataset.s : +node.dataset.s + node.textContent.length;
+      }
+      if (node === ms) {
+        let pos = 0;
+        for (let i = 0; i < offset && i < ms.childNodes.length; i++) {
+          const ch = ms.childNodes[i];
+          if (ch.dataset && ch.dataset.s != null) pos = +ch.dataset.s + ch.textContent.length;
+        }
+        return pos;
+      }
+    }
+    return null;
+  }
+
+  // 範囲端がマーカー上にあるときは、直前の本文位置に寄せる
+  function boundaryPos(node, offset, isEnd) {
+    let p = globalPos(node, offset);
+    if (p != null) return p;
+    const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    const mk = el && el.closest && el.closest('.mk');
+    if (mk) {
+      let prev = mk.previousElementSibling;
+      while (prev && !(prev.dataset && prev.dataset.s != null)) prev = prev.previousElementSibling;
+      if (prev) return +prev.dataset.s + prev.textContent.length;
+      return 0;
+    }
+    return isEnd ? state.text.length : 0;
+  }
+
+  // ───────── タップで選択 ─────────
+  ms.addEventListener('click', (e) => {
+    const mk = e.target.closest('.mk');
+    if (mk) { openEdit(+mk.dataset.id); return; }
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && ms.contains(sel.anchorNode)) return;
+    const c = caretAt(e.clientX, e.clientY);
+    if (!c) return;
+    const pos = globalPos(c.node, c.offset);
+    if (pos == null) return;
+    const t = state.text;
+    let ci = pos;
+    if (ci >= t.length || t[ci] === '\n') ci = pos - 1;
+    const r = unitRangeAt(t, ci);
+    if (r) openNew(r.start, r.end);
+  });
+
+  // 長押し・ドラッグでの範囲選択
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    const ok = sel && !sel.isCollapsed && ms.contains(sel.anchorNode) && ms.contains(sel.focusNode)
+      && $('commentSheet').hidden;
+    $('selFloat').hidden = !ok;
+  });
+  $('selFloat').addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const r = sel.getRangeAt(0);
+    let s = boundaryPos(r.startContainer, r.startOffset, false);
+    let e = boundaryPos(r.endContainer, r.endOffset, true);
+    if (s > e) [s, e] = [e, s];
+    const tr = trimRange(state.text, s, e);
+    sel.removeAllRanges();
+    $('selFloat').hidden = true;
+    if (tr) openNew(tr.start, tr.end);
+  });
+
+  // ───────── シート操作 ─────────
+  let openSheetEl = null;
+  function openSheet(el) {
+    closeSheet(true);
+    $('backdrop').hidden = false;
+    el.hidden = false;
+    openSheetEl = el;
+  }
+  function closeSheet(silent) {
+    if (openSheetEl) openSheetEl.hidden = true;
+    openSheetEl = null;
+    $('backdrop').hidden = true;
+    if (!silent && pending) { pending = null; render(); }
+  }
+  $('backdrop').addEventListener('click', () => closeSheet());
+
+  function scrollToPending() {
+    const el = ms.querySelector('.sel');
+    if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    const want = window.innerHeight * 0.14;
+    if (top > window.innerHeight * 0.3 || top < 60) window.scrollBy({ top: top - want, behavior: 'smooth' });
+  }
+
+  function setQuote() {
+    $('quote').textContent = state.text.slice(pending.start, pending.end);
+  }
+
+  function openNew(start, end) {
+    const q = state.text.slice(start, end);
+    pending = { start, end, id: null, base: q };
+    $('commentTitle').textContent = '指摘を追加';
+    $('saveComment').textContent = '追加';
+    $('deleteNote').hidden = true;
+    $('resetComment').hidden = false;
+    $('commentBox').value = q;
+    setQuote();
+    render();
+    openSheet($('commentSheet'));
+    scrollToPending();
+  }
+
+  function openEdit(id) {
+    const n = state.notes.find((x) => x.id === id);
+    if (!n) return;
+    pending = { start: n.start, end: n.end, id, base: state.text.slice(n.start, n.end) };
+    const num = sortedNotes().findIndex((x) => x.id === id) + 1;
+    $('commentTitle').textContent = `指摘 ${num} を編集`;
+    $('saveComment').textContent = '更新';
+    $('deleteNote').hidden = false;
+    $('resetComment').hidden = true;
+    $('commentBox').value = n.comment;
+    setQuote();
+    render();
+    openSheet($('commentSheet'));
+    scrollToPending();
+  }
+
+  // 前後の文まで範囲を広げる
+  function nextNonSpace(t, i, dir) {
+    while (i >= 0 && i < t.length && (SPACE.test(t[i]))) i += dir;
+    return i;
+  }
+  function extend(dir) {
+    if (!pending) return;
+    const t = state.text;
+    const oldQ = t.slice(pending.start, pending.end);
+    const idx = dir < 0 ? nextNonSpace(t, pending.start - 1, -1) : nextNonSpace(t, pending.end, 1);
+    if (idx < 0 || idx >= t.length) { toast(dir < 0 ? 'これより前に文がありません' : 'これより後に文がありません'); return; }
+    const r = sentenceAt(t, idx);
+    if (!r) return;
+    pending.start = Math.min(pending.start, r.start);
+    pending.end = Math.max(pending.end, r.end);
+    const newQ = t.slice(pending.start, pending.end);
+    if ($('commentBox').value === oldQ) $('commentBox').value = newQ;
+    pending.base = newQ;
+    setQuote();
+    render();
+  }
+  $('extPrev').addEventListener('click', () => extend(-1));
+  $('extNext').addEventListener('click', () => extend(1));
+
+  $('resetComment').addEventListener('click', () => {
+    if (!pending) return;
+    $('commentBox').value = state.text.slice(pending.start, pending.end);
+    $('commentBox').focus();
+  });
+  $('cancelComment').addEventListener('click', () => closeSheet());
+
+  $('saveComment').addEventListener('click', () => {
+    if (!pending) return;
+    const comment = $('commentBox').value.trim();
+    if (!comment) { toast('コメントを入力してください'); return; }
+    const quote = state.text.slice(pending.start, pending.end);
+    if (pending.id == null) {
+      state.notes.push({ id: state.nextId++, start: pending.start, end: pending.end, quote, comment });
+      toast('指摘を追加しました');
+    } else {
+      const n = state.notes.find((x) => x.id === pending.id);
+      if (n) Object.assign(n, { start: pending.start, end: pending.end, quote, comment });
+      toast('更新しました');
+    }
+    save();
+    pending = null;
+    closeSheet(true);
+    render();
+  });
+
+  $('deleteNote').addEventListener('click', () => {
+    if (!pending || pending.id == null) return;
+    if (!confirm('この指摘を削除しますか？')) return;
+    state.notes = state.notes.filter((x) => x.id !== pending.id);
+    save();
+    pending = null;
+    closeSheet(true);
+    render();
+    toast('削除しました');
+  });
+
+  // ───────── 一覧 ─────────
+  function paragraphNo(t, pos) {
+    const before = t.slice(0, pos);
+    const lineStart = before.lastIndexOf('\n') + 1;
+    let n = 0;
+    for (const line of t.slice(0, lineStart).split('\n')) if (line.trim()) n++;
+    return n + 1;
+  }
+
+  function renderList() {
+    const notes = sortedNotes();
+    $('listSub').textContent = notes.length ? `${notes.length}件` : '';
+    if (!notes.length) {
+      $('listBody').innerHTML = '<div class="empty">まだ指摘はありません。<br>本文の文をタップして追加できます。</div>';
+      return;
+    }
+    $('listBody').innerHTML = notes.map((n, i) => {
+      const unchanged = n.comment === n.quote;
+      return `<div class="item">
+        <div class="num">${i + 1}</div>
+        <div class="body" data-edit="${n.id}">
+          <div class="q">第${paragraphNo(state.text, n.start)}段落｜${esc(n.quote)}</div>
+          <div class="c">${esc(n.comment)}</div>
+          ${unchanged ? '<div class="warn">コメントが選択文のままです</div>' : ''}
+        </div>
+        <button class="del" data-del="${n.id}">削除</button>
+      </div>`;
+    }).join('');
+  }
+
+  $('listBtn').addEventListener('click', () => { renderList(); openSheet($('listSheet')); });
+  $('closeList').addEventListener('click', () => closeSheet());
+  $('listBody').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]');
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      const id = +del.dataset.del;
+      if (!confirm('この指摘を削除しますか？')) return;
+      state.notes = state.notes.filter((x) => x.id !== id);
+      save(); render(); renderList();
+      return;
+    }
+    if (ed) openEdit(+ed.dataset.edit);
+  });
+  $('clearAll').addEventListener('click', () => {
+    if (!state.notes.length) return;
+    if (!confirm('すべての指摘を消去しますか？（原稿は残ります）')) return;
+    state.notes = [];
+    save(); render(); renderList();
+    toast('指摘を消去しました');
+  });
+
+  // ───────── 指示文の生成 ─────────
+  function clip(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+  function contextOf(t, n) {
+    const ls = t.lastIndexOf('\n', n.start - 1) + 1;
+    let le = t.indexOf('\n', n.end); if (le < 0) le = t.length;
+    const pre = t.slice(Math.max(ls, n.start - 25), n.start);
+    const post = t.slice(n.end, Math.min(le, n.end + 25));
+    if (!pre.trim() && !post.trim()) return '';
+    const q = t.slice(n.start, n.end);
+    const mid = q.length > 40 ? q.slice(0, 20) + '……' + q.slice(-12) : q;
+    const head = (n.start - 25 > ls) ? '……' : '';
+    const tail = (n.end + 25 < le) ? '……' : '';
+    return `${head}${pre}【${mid}】${post}${tail}`;
+  }
+
+  function buildOutput() {
+    const t = state.text;
+    const notes = sortedNotes();
+    const lines = [];
+    lines.push(`原稿の修正指示です（全${notes.length}件）。`);
+    lines.push(`原稿本文は最初にお渡ししたもの${state.fileName ? `（${state.fileName}）` : ''}を参照し、番号順に対応してください。「前後」は場所の目印で、【】の中が該当箇所です。`);
+    notes.forEach((n, i) => {
+      lines.push('');
+      lines.push(`■${i + 1}（第${paragraphNo(t, n.start)}段落）`);
+      lines.push(`該当：「${n.quote}」`);
+      const ctx = contextOf(t, n);
+      if (ctx) lines.push(`前後：${ctx}`);
+      lines.push(`指示：${n.comment === n.quote ? '（未記入）' : ''}`);
+      if (n.comment !== n.quote) lines.push(n.comment);
+    });
+    return lines.join('\n');
+  }
+
+  $('genBtn').addEventListener('click', () => {
+    if (!state.notes.length) return;
+    const unchanged = state.notes.filter((n) => n.comment === n.quote).length;
+    $('outWarn').hidden = unchanged === 0;
+    $('outWarn').textContent = `${unchanged}件のコメントが選択文のままです（「未記入」として出力されます）`;
+    $('outBox').value = buildOutput();
+    openSheet($('outSheet'));
+  });
+  $('closeOut').addEventListener('click', () => closeSheet());
+
+  async function copyText(s) {
+    try {
+      await navigator.clipboard.writeText(s);
+      return true;
+    } catch (e) {
+      const box = $('outBox');
+      box.removeAttribute('readonly');
+      box.focus(); box.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e2) {}
+      box.setAttribute('readonly', '');
+      return ok;
+    }
+  }
+  $('copyOut').addEventListener('click', async () => {
+    const ok = await copyText($('outBox').value);
+    toast(ok ? 'コピーしました' : 'コピーできませんでした。長押しで全選択してください');
+  });
+  $('doneClear').addEventListener('click', () => {
+    if (!confirm('指摘をすべて消去して、次の推敲に進みますか？（原稿は残ります）')) return;
+    state.notes = [];
+    save(); closeSheet(); render();
+    toast('指摘を消去しました');
+  });
+
+  // ───────── 読み込み ─────────
+  function decode(buf) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+    catch (e) {
+      try { return new TextDecoder('shift_jis').decode(buf); }
+      catch (e2) { return new TextDecoder().decode(buf); }
+    }
+  }
+
+  function startWith(text, name) {
+    text = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    if (!text.trim()) { toast('本文が空です'); return; }
+    state = { fileName: name || '', text, notes: [], nextId: 1 };
+    pending = null;
+    save();
+    window.scrollTo(0, 0);
+    showView();
+  }
+
+  function pickFile() {
+    if (state.notes.length && !confirm('新しい原稿を読み込むと、今の指摘は消えます。よろしいですか？')) return;
+    $('fileInput').value = '';
+    $('fileInput').click();
+  }
+  $('loadBtn').addEventListener('click', pickFile);
+  $('startLoadBtn').addEventListener('click', pickFile);
+  $('fileInput').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!/\.(txt|md|markdown|text)$/i.test(f.name) && !/^text\//.test(f.type)) {
+      toast('.txt か .md のファイルを選んでください');
+      return;
+    }
+    try {
+      const buf = await f.arrayBuffer();
+      startWith(decode(buf), f.name);
+      toast(`「${clip(f.name, 18)}」を読み込みました`);
+    } catch (err) {
+      toast('読み込みに失敗しました');
+    }
+  });
+  $('pasteStartBtn').addEventListener('click', () => startWith($('pasteArea').value, ''));
+
+  $('newBtn').addEventListener('click', () => {
+    if (!confirm('今の原稿と指摘を消去して、最初の画面に戻ります。よろしいですか？')) return;
+    state = { fileName: '', text: '', notes: [], nextId: 1 };
+    pending = null;
+    save();
+    $('pasteArea').value = '';
+    closeSheet(true);
+    showView();
+  });
+
+  // ───────── トースト ─────────
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('on'), 2000);
+  }
+
+  // ───────── PWA ─────────
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    $('installBtn').hidden = false;
+  });
+  $('installBtn').addEventListener('click', async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    try { await deferredInstall.userChoice; } catch (e) {}
+    deferredInstall = null;
+    $('installBtn').hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; toast('ホーム画面に追加しました'); });
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (standalone) $('installCard').hidden = true;
+
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+
+  // テスト用に一部を公開
+  window.__genko = { unitRangeAt, sentenceAt, bracketAt, buildOutput, get state() { return state; } };
+
+  load();
+  showView();
+})();
+</script>
+</body>
+</html>
